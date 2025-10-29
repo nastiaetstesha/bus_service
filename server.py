@@ -3,6 +3,8 @@ import logging
 from functools import partial
 import trio
 from trio_websocket import serve_websocket, WebSocketRequest, ConnectionClosed
+from itertools import cycle
+
 
 buses = {}
 

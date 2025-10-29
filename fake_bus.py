@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 import trio
 from trio_websocket import open_websocket_url, ConnectionClosed
+from itertools import cycle
 
 from load_routes import load_routes
 
@@ -15,18 +16,23 @@ def route_points(route: Dict[str, Any]) -> List[Dict[str, float]]:
     return [{"lat": float(lat), "lng": float(lng)} for lat, lng in pts]
 
 
+
 async def run_bus(url: str, bus_id: str, route_name: str,
                   points: List[Dict[str, float]],
                   period: float = 0.3, step_skip: int = 1):
-    """Один автобус: отдельное ws-подключение и отправка координат по кругу."""
+
     await trio.sleep(random.uniform(0, 0.5))
 
-    idx = 0
+    def iter_points():
+        pts = points[::step_skip] if step_skip > 1 else points
+        if len(pts) == 1:
+            pts = pts * 2
+        return cycle(pts)
+
     while True:
         try:
             async with open_websocket_url(url) as ws:
-                while True:
-                    p = points[idx]
+                for p in iter_points():
                     msg = {
                         "busId": bus_id,
                         "lat": round(p["lat"], 6),
@@ -35,14 +41,9 @@ async def run_bus(url: str, bus_id: str, route_name: str,
                     }
                     await ws.send_message(json.dumps(msg, ensure_ascii=False))
                     await trio.sleep(period)
+        except (ConnectionClosed, OSError):
+            await trio.sleep(0.3)
 
-                    idx = (idx + step_skip) % len(points)
-        except ConnectionClosed:
-            # сервер перезапустили? подождём и переподключимся
-            await trio.sleep(0.5)
-        except OSError:
-            # временная сетевушка — подождём и попробуем снова
-            await trio.sleep(0.5)
 
 
 async def main(url: str, routes_dir: str, max_routes: int,
