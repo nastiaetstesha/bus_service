@@ -57,4 +57,13 @@
 - [Leaflet](https://leafletjs.com/) — отрисовка карты
 - [loglevel](https://www.npmjs.com/package/loglevel) для логгирования
 
+python fake_bus.py \
+  --routes-dir routes \
+  --url ws://127.0.0.1:8080 \
+  --max-routes 200 \
+  --buses-per-route 100 \
+  --num-sockets 8 \
+  --period 0.25 \
+  --step-skip 2 \
+  --shuffle
 
