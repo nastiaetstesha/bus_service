@@ -5,6 +5,8 @@ import argparse
 from typing import List, Dict, Any
 from itertools import cycle, islice
 from functools import partial
+import functools
+import trio_websocket
 
 import trio
 from trio import ClosedResourceError
@@ -15,6 +17,28 @@ from load_routes import load_routes
 
 
 logger = logging.getLogger("fake_bus")
+
+
+def relaunch_on_disconnect(delay: float = 0.3):
+    def wrapper(func):
+        @functools.wraps(func)
+        async def inner(*args, **kwargs):
+            while True:
+                try:
+                    await func(*args, **kwargs)
+                except (
+                    trio_websocket.ConnectionClosed,
+                    trio_websocket.HandshakeError,
+                    OSError,
+                ) as e:
+                    logger.warning("connection lost (%s), reconnect in %.1fs", e, delay)
+                    await trio.sleep(delay)
+                except trio.ClosedResourceError as e:
+                    logger.info("resource closed: %s", e)
+                    return
+        return inner
+    return wrapper
+
 
 
 def setup_logging(verbosity: int):
@@ -81,16 +105,25 @@ async def run_bus(
 
 
 # ------ отправитель: один сокет на канал --------
+# async def send_updates(url: str, recv_ch: trio.MemoryReceiveChannel):
+#     while True:
+#         try:
+#             async with open_websocket_url(url) as ws:
+#                 async with recv_ch:
+#                     async for msg in recv_ch:
+#                         await ws.send_message(json.dumps(msg, ensure_ascii=False))
+#         except (ConnectionClosed, OSError) as e:
+#             logger.warning("sender: %s, reconnecting…", e)
+#             await trio.sleep(0.3)
+@relaunch_on_disconnect(delay=0.3)
 async def send_updates(url: str, recv_ch: trio.MemoryReceiveChannel):
-    while True:
-        try:
-            async with open_websocket_url(url) as ws:
-                async with recv_ch:
-                    async for msg in recv_ch:
-                        await ws.send_message(json.dumps(msg, ensure_ascii=False))
-        except (ConnectionClosed, OSError) as e:
-            logger.warning("sender: %s, reconnecting…", e)
-            await trio.sleep(0.3)
+    async with open_websocket_url(url) as ws:
+        while True:
+            # ждём сообщение от автобуса
+            msg = await recv_ch.receive()
+            # отправляем на сервер
+            await ws.send_message(json.dumps(msg, ensure_ascii=False))
+
 
 
 # --------- main ----
