@@ -80,7 +80,7 @@
 
 ловим Ctrl+C и не сыпем огромным traceback
 
-
+Запускаешь имитатор:
 python fake_bus.py \
   --server ws://127.0.0.1:8080 \
   --routes-dir routes \
@@ -99,4 +99,22 @@ python fake_bus.py \
 
 python fake_bus.py --emulator-id A --routes-number 100 --buses-per-route 50 -v
 python fake_bus.py --emulator-id B --routes-number 100 --buses-per-route 50 -v
+
+Запускаешь сервер: python server.py -v
+Список опций
+bus_port - порт для имитатора автобусов
+browser_port - порт для браузера
+v — настройка логирования
+
+
+Примеры запуска:
+
+python server.py
+python server.py --bus-port 9000 --browser-port 9001 -v
+python server.py -vv
+
+Запускаешь имитатор:
+python fake_bus.py --server ws://127.0.0.1:8080 ...
+
+Открываешь index.html, указываешь ws://127.0.0.1:8000/ws, галочку "отладка".
 

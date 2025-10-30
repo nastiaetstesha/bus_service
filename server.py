@@ -1,6 +1,8 @@
 import json
 import logging
+import argparse
 from dataclasses import dataclass, asdict
+from contextlib import suppress
 
 import trio
 from trio_websocket import serve_websocket, ConnectionClosed
@@ -136,20 +138,81 @@ async def handle_browser(request):
         logger.info("browser disconnected")
 
 
-async def main():
+async def run_server(bus_port: int, browser_port: int):
+    async with trio.open_nursery() as nursery:
+        nursery.start_soon(
+            serve_websocket, handle_bus, "127.0.0.1", bus_port, None
+        )
+        nursery.start_soon(
+            serve_websocket, handle_browser, "127.0.0.1", browser_port, None
+        )
+        logger.info("listening on ws://127.0.0.1:%s (buses)", bus_port)
+        logger.info("listening on ws://127.0.0.1:%s (browser)", browser_port)
+
+
+# async def main():
+#     logging.getLogger("trio_websocket").setLevel(logging.WARNING)
+#     logging.getLogger("wsproto").setLevel(logging.WARNING)
+
+#     async with trio.open_nursery() as nursery:
+#         # 8080 — сюда шлёт fake_bus.py
+#         nursery.start_soon(
+#             serve_websocket, handle_bus, "127.0.0.1", 8080, None
+#         )
+#         # 8000 — сюда подключается браузер
+#         nursery.start_soon(
+#             serve_websocket, handle_browser, "127.0.0.1", 8000, None
+#         )
+
+
+def setup_logging(verbosity: int):
+    # 0 — WARNING, 1 — INFO, 2+ — DEBUG
+    if verbosity >= 2:
+        level = logging.DEBUG
+    elif verbosity == 1:
+        level = logging.INFO
+    else:
+        level = logging.WARNING
+
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
+    )
+
     logging.getLogger("trio_websocket").setLevel(logging.WARNING)
     logging.getLogger("wsproto").setLevel(logging.WARNING)
 
-    async with trio.open_nursery() as nursery:
-        # 8080 — сюда шлёт fake_bus.py
-        nursery.start_soon(
-            serve_websocket, handle_bus, "127.0.0.1", 8080, None
-        )
-        # 8000 — сюда подключается браузер
-        nursery.start_soon(
-            serve_websocket, handle_browser, "127.0.0.1", 8000, None
-        )
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Сервер для урока «Автобусы на карте»"
+    )
+    parser.add_argument(
+        "--bus-port",
+        type=int,
+        default=8080,
+        help="порт, на который шлёт имитатор автобусов (default: 8080)",
+    )
+    parser.add_argument(
+        "--browser-port",
+        type=int,
+        default=8000,
+        help="порт, на который подключается браузер (default: 8000)",
+    )
+    parser.add_argument(
+        "-v",
+        action="count",
+        default=0,
+        help="уровень логирования: -v (INFO), -vv (DEBUG)",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    trio.run(main)
+    args = parse_args()
+    setup_logging(args.v)
+
+    with suppress(KeyboardInterrupt):
+        trio.run(run_server, args.bus_port, args.browser_port)
+
+    logger.info("stopped by user")
