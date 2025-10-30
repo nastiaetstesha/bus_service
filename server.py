@@ -14,7 +14,13 @@ logging.getLogger("trio_websocket").setLevel(logging.WARNING)
 logging.getLogger("wsproto").setLevel(logging.WARNING)
 
 
-buses: dict[str, dict] = {}
+ALL_BUSES: dict[str, dict] = {}
+
+def is_inside(bounds: dict, lat: float, lng: float) -> bool:
+    return (
+        bounds["south_lat"] <= lat <= bounds["north_lat"]
+        and bounds["west_lng"] <= lng <= bounds["east_lng"]
+    )
 
 
 def jdump(obj) -> str:
@@ -47,7 +53,7 @@ async def handle_bus(request: WebSocketRequest):
         while True:
             msg = await ws.get_message()
             data = json.loads(msg)
-            buses[data["busId"]] = data
+            ALL_BUSES[data["busId"]] = data
     except ConnectionClosed:
         logger.info("[8080] bus disconnected %s", addr)
 
@@ -62,15 +68,22 @@ async def listen_browser(ws):
             break
 
         try:
-            data = json.loads(msg)
+            payload = json.loads(msg)
         except json.JSONDecodeError:
-            logger.debug("got non-json from browser: %r", msg)
+            logger.debug("browser sent non-json: %r", msg)
             continue
 
-        if data.get("msgType") == "newBounds":
-            logger.debug(json.dumps(data, ensure_ascii=False))
+        if payload.get("msgType") == "newBounds":
+            bounds = payload["data"]
+
+            inside = [
+                bus for bus in ALL_BUSES.values()
+                if is_inside(bounds, bus["lat"], bus["lng"])
+            ]
+            logger.debug(json.dumps(payload, ensure_ascii=False))
+            logger.debug("%s buses inside bounds", len(inside))
         else:
-            logger.debug("browser msg: %s", data)
+            logger.debug("browser msg: %s", payload)
 
 
 
@@ -79,7 +92,7 @@ async def talk_to_browser(ws):
     while True:
         snapshot = {
             "msgType": "Buses",
-            "buses": list(buses.values()),
+            "buses": list(ALL_BUSES.values()),
         }
         try:
             await ws.send_message(json.dumps(snapshot, ensure_ascii=False))
