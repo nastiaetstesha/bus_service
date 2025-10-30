@@ -57,30 +57,33 @@
 - [Leaflet](https://leafletjs.com/) — отрисовка карты
 - [loglevel](https://www.npmjs.com/package/loglevel) для логгирования
 
---server
-куда слать: ws://127.0.0.1:8080
 
---routes-number
-сколько маршрутов взять из папки
 
---buses-per-route
-сколько автобусов посадить на каждый
+##
+`--server`
+#### куда слать: ws://127.0.0.1:8080
 
---websockets-number
-сколько открыть реальных WS (обычно 5–10)
+`--routes-number`
+#### сколько маршрутов взять из папки
 
---emulator-id
-удобно, если ты запускаешь 2–3 имитатора на одной машине
+`--buses-per-route`
+#### сколько автобусов посадить на каждый
 
---refresh-timeout
-частота движения
+`--websockets-number`
+#### сколько открыть реальных WS (обычно 5–10)
 
--v / -vv
-логирование
+`--emulator-id`
+#### удобно, если ты запускаешь 2–3 имитатора на одной машине
 
-ловим Ctrl+C и не сыпем огромным traceback
+`--refresh-timeout`
+#### частота движения
 
-Запускаешь имитатор:
+`-v / -vv`
+#### логирование
+
+
+### Запуск имитатора в одном тепминале:
+```
 python fake_bus.py \
   --server ws://127.0.0.1:8080 \
   --routes-dir routes \
@@ -92,29 +95,31 @@ python fake_bus.py \
   --step-skip 2 \
   --shuffle \
   -v
+```
 
 
 
-Два имитатора параллельно:
-
+### Два имитатора параллельно:
+```
 python fake_bus.py --emulator-id A --routes-number 100 --buses-per-route 50 -v
 python fake_bus.py --emulator-id B --routes-number 100 --buses-per-route 50 -v
+```
 
-Запускаешь сервер: python server.py -v
-Список опций
-bus_port - порт для имитатора автобусов
-browser_port - порт для браузера
-v — настройка логирования
+### Запускаешь сервер: `python server.py -v`
+#### Список опций
+`bus_port` - порт для имитатора автобусов
+`browser_port` - порт для браузера
+`v` — настройка логирования
 
 
-Примеры запуска:
+#### Примеры запуска :
 
-python server.py
-python server.py --bus-port 9000 --browser-port 9001 -v
-python server.py -vv
+`python server.py`
+`python server.py --bus-port 9000 --browser-port 9001 -v`
+`python server.py -vv`
 
-Запускаешь имитатор:
-python fake_bus.py --server ws://127.0.0.1:8080 ...
+#### Запускаешь имитатор в др тепминале:
+`python fake_bus.py --server ws://127.0.0.1:8080 ...`
 
-Открываешь index.html, указываешь ws://127.0.0.1:8000/ws, галочку "отладка".
+Открываешь `index.html`, указываешь `ws://127.0.0.1:8000/ws`, галочку "отладка".
 

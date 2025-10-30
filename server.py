@@ -64,7 +64,6 @@ def setup_logging(verbosity: int):
         level=level,
         format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
     )
-    # чтобы не засоряли вывод
     logging.getLogger("trio_websocket").setLevel(logging.WARNING)
     logging.getLogger("wsproto").setLevel(logging.WARNING)
 
@@ -98,11 +97,31 @@ async def handle_bus(request):
     try:
         while True:
             raw = await ws.get_message()
-            payload = json.loads(raw)
-            bus = Bus.from_json(payload)
+            logger.debug("from bus: %s", raw)
+
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                await send_error(ws, "Requires valid JSON")
+                continue
+
+            required_fields = ("busId", "lat", "lng", "route")
+            missing = [f for f in required_fields if f not in payload]
+            if missing:
+                await send_error(ws, f"Requires {', '.join(missing)} specified")
+                continue
+
+            try:
+                bus = Bus.from_json(payload)
+            except (ValueError, TypeError) as e:
+                await send_error(ws, f"Bad payload: {e}")
+                continue
+
             ALL_BUSES[bus.busId] = bus
+            logger.debug("updated bus %s", bus.busId)
     except ConnectionClosed:
         logger.info("bus emulator disconnected")
+
 
 
 async def listen_browser(ws, bounds: WindowBounds):
