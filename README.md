@@ -57,13 +57,46 @@
 - [Leaflet](https://leafletjs.com/) — отрисовка карты
 - [loglevel](https://www.npmjs.com/package/loglevel) для логгирования
 
+--server
+куда слать: ws://127.0.0.1:8080
+
+--routes-number
+сколько маршрутов взять из папки
+
+--buses-per-route
+сколько автобусов посадить на каждый
+
+--websockets-number
+сколько открыть реальных WS (обычно 5–10)
+
+--emulator-id
+удобно, если ты запускаешь 2–3 имитатора на одной машине
+
+--refresh-timeout
+частота движения
+
+-v / -vv
+логирование
+
+ловим Ctrl+C и не сыпем огромным traceback
+
+
 python fake_bus.py \
+  --server ws://127.0.0.1:8080 \
   --routes-dir routes \
-  --url ws://127.0.0.1:8080 \
-  --max-routes 200 \
+  --routes-number 200 \
   --buses-per-route 100 \
-  --num-sockets 8 \
-  --period 0.25 \
+  --websockets-number 8 \
+  --emulator-id test1 \
+  --refresh-timeout 0.25 \
   --step-skip 2 \
-  --shuffle
+  --shuffle \
+  -v
+
+
+
+Два имитатора параллельно:
+
+python fake_bus.py --emulator-id A --routes-number 100 --buses-per-route 50 -v
+python fake_bus.py --emulator-id B --routes-number 100 --buses-per-route 50 -v
 
