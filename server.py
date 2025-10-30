@@ -2,6 +2,51 @@ import json
 import logging
 import trio
 from trio_websocket import serve_websocket, ConnectionClosed, WebSocketRequest
+from dataclasses import dataclass, asdict
+
+
+@dataclass
+class Bus:
+    busId: str
+    lat: float
+    lng: float
+    route: str
+
+    @classmethod
+    def from_json(cls, payload: dict) -> "Bus":
+        return cls(
+            busId=payload["busId"],
+            lat=float(payload["lat"]),
+            lng=float(payload["lng"]),
+            route=payload["route"],
+        )
+
+    def to_front(self) -> dict:
+        # фронтенд ждёт словарь, поэтому обратно в dict
+        return asdict(self)
+
+
+@dataclass
+class WindowBounds:
+    south_lat: float
+    north_lat: float
+    west_lng: float
+    east_lng: float
+
+    @classmethod
+    def from_json(cls, payload: dict) -> "WindowBounds":
+        return cls(
+            south_lat=float(payload["south_lat"]),
+            north_lat=float(payload["north_lat"]),
+            west_lng=float(payload["west_lng"]),
+            east_lng=float(payload["east_lng"]),
+        )
+
+    def is_inside(self, lat: float, lng: float) -> bool:
+        return (
+            self.south_lat <= lat <= self.north_lat
+            and self.west_lng <= lng <= self.east_lng
+        )
 
 
 logger = logging.getLogger("server")
@@ -14,7 +59,7 @@ logging.getLogger("trio_websocket").setLevel(logging.WARNING)
 logging.getLogger("wsproto").setLevel(logging.WARNING)
 
 
-ALL_BUSES: dict[str, dict] = {}
+ALL_BUSES: dict[str, Bus] = {}
 
 def is_inside(bounds: dict, lat: float, lng: float) -> bool:
     return (
@@ -45,17 +90,18 @@ def remote_addr(request: WebSocketRequest) -> str:
 
 
 # ----- обработчик автобусов (8080) 
-async def handle_bus(request: WebSocketRequest):
-    addr = remote_addr(request)
-    logger.info("[8080] bus connected %s path=%s", addr, request.path)
+async def handle_bus(request):
+    ws = await request.accept()
+    logger.info("bus source connected")
+
     try:
-        ws = await request.accept()
         while True:
-            msg = await ws.get_message()
-            data = json.loads(msg)
-            ALL_BUSES[data["busId"]] = data
+            raw = await ws.get_message()
+            payload = json.loads(raw)
+            bus = Bus.from_json(payload)
+            ALL_BUSES[bus.busId] = bus
     except ConnectionClosed:
-        logger.info("[8080] bus disconnected %s", addr)
+        logger.info("bus source disconnected")
 
 
 
@@ -105,9 +151,23 @@ async def talk_to_browser(ws):
 # -- обработчик браузера (8000)
 async def handle_browser(request):
     ws = await request.accept()
-    async with trio.open_nursery() as nursery:
-        nursery.start_soon(listen_browser, ws)
-        nursery.start_soon(talk_to_browser, ws)
+    logger.info("browser connected")
+
+    try:
+        while True:
+            raw = await ws.get_message()
+            payload = json.loads(raw)
+
+            if payload.get("msgType") == "newBounds":
+                bounds = WindowBounds.from_json(payload["data"])
+                logger.debug(json.dumps(payload, ensure_ascii=False))
+                await send_buses(ws, bounds)
+            else:
+                logger.debug("browser msg: %s", payload)
+
+    except ConnectionClosed:
+        logger.info("browser disconnected")
+
 
 # async def handle_browser(request: WebSocketRequest):
 #     addr = remote_addr(request)
@@ -125,21 +185,37 @@ async def handle_browser(request):
 #     logger.info("[8000] browser disconnected %s", addr)
 
 
+async def send_buses(ws, bounds: WindowBounds):
+    visible = [
+        bus.to_front()
+        for bus in ALL_BUSES.values()
+        if bounds.is_inside(bus.lat, bus.lng)
+    ]
+    msg = {
+        "msgType": "Buses",
+        "buses": visible,
+    }
+    await ws.send_message(json.dumps(msg, ensure_ascii=False))
+    logger.debug("%s buses inside bounds", len(visible))
+
+
 #  ---- запуск двух серверов 
-async def run_server(handler, host: str, port: int):
-    logger.info("listening on ws://%s:%s", host, port)
-    await serve_websocket(handler, host, port, ssl_context=None)
-
-
 async def main():
     async with trio.open_nursery() as nursery:
-        nursery.start_soon(run_server, handle_bus, "127.0.0.1", 8080)
-        nursery.start_soon(run_server, handle_browser, "127.0.0.1", 8000)
+        # на 8080 будем слушать автобусы
+        nursery.start_soon(
+            serve_websocket, handle_bus, "127.0.0.1", 8080, None
+        )
+        # на 8000 — браузер
+        nursery.start_soon(
+            serve_websocket, handle_browser, "127.0.0.1", 8000, None
+        )
 
 
 if __name__ == "__main__":
-    try:
-        trio.run(main)
-    except KeyboardInterrupt:
-        logger.info("stopped by user")
+    # чтобы trio-websocket не флудил
+    logging.getLogger("trio_websocket").setLevel(logging.WARNING)
+    logging.getLogger("wsproto").setLevel(logging.WARNING)
+
+    trio.run(main)
 
